@@ -1,7 +1,34 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, EmbedBuilder, ActivityType } = require('discord.js');
+
+const {
+    Client,
+    GatewayIntentBits,
+    EmbedBuilder,
+    ActivityType
+} = require('discord.js');
+
 const fs = require('fs');
 const gachasData = require('./gachas.js');
+
+// =========================
+// CONFIG
+// =========================
+
+const TOKEN = process.env.TOKEN;
+
+if (!TOKEN) {
+    console.log("❌ TOKEN no encontrado en .env");
+    process.exit(1);
+}
+
+const DATA_FILE = './usuarios.json';
+const TIEMPO_TICKET = 7 * 60 * 1000;
+const ID_CANAL_TOP = '1500647578281312286';
+const BANNER_URL = 'https://i.imgur.com/uvLzZ3P.png';
+
+// =========================
+// CLIENTE
+// =========================
 
 const client = new Client({
     intents: [
@@ -11,214 +38,358 @@ const client = new Client({
     ]
 });
 
-// --- CONFIGURACIÓN ---
-const DATA_FILE = './usuarios.json';
-const TIEMPO_TICKET = 7 * 60 * 1000; 
-const ID_CANAL_TOP = '1500647578281312286'; 
-const BANNER_URL = 'https://i.imgur.com/uvLzZ3P.png'; // <--- Puedes cambiar este link por un banner de la Papu Family
+// =========================
+// BASE DE DATOS
+// =========================
 
-// --- BASE DE DATOS ---
 let db = {};
+
 function loadDB() {
     try {
         if (fs.existsSync(DATA_FILE)) {
             db = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
         }
-    } catch (e) { db = {}; }
+    } catch (err) {
+        console.log("❌ Error cargando DB:", err);
+        db = {};
+    }
 }
-loadDB();
 
 function saveDB() {
-    try { fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 4)); } 
-    catch (e) { console.error("Error guardando DB:", e); }
+    try {
+        fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 4));
+    } catch (err) {
+        console.log("❌ Error guardando DB:", err);
+    }
 }
 
-// --- UTILIDADES ---
-const getNextLevelXP = (level) => Math.floor(100 * Math.pow(1.25, level - 1));
+loadDB();
 
-const getProgressBar = (current, total) => {
-    const percentage = Math.min(Math.floor((current / total) * 10), 10);
+// =========================
+// UTILIDADES
+// =========================
+
+const cooldowns = new Set();
+
+function getNextLevelXP(level) {
+    return Math.floor(100 * Math.pow(1.25, level - 1));
+}
+
+function getProgressBar(current, total) {
+    const percentage = Math.min(
+        Math.floor((current / total) * 10),
+        10
+    );
+
     return "🟩".repeat(percentage) + "⬛".repeat(10 - percentage);
-};
+}
 
-const updateTickets = (userId) => {
+function updateTickets(userId) {
     const user = db[userId];
+
     if (user.tickets < 3) {
         const now = Date.now();
         const tiempoPasado = now - user.lastTicketUpdate;
-        const nuevosTickets = Math.floor(tiempoPasado / TIEMPO_TICKET);
+
+        const nuevosTickets = Math.floor(
+            tiempoPasado / TIEMPO_TICKET
+        );
+
         if (nuevosTickets > 0) {
-            user.tickets = Math.min(3, user.tickets + nuevosTickets);
-            user.lastTicketUpdate = now - (tiempoPasado % TIEMPO_TICKET);
+            user.tickets = Math.min(
+                3,
+                user.tickets + nuevosTickets
+            );
+
+            user.lastTicketUpdate =
+                now - (tiempoPasado % TIEMPO_TICKET);
+
             saveDB();
         }
     }
-};
+}
 
-const obtenerTopUsuarios = () => {
+function obtenerTopUsuarios() {
     return Object.entries(db)
         .map(([id, data]) => ({ id, ...data }))
         .sort((a, b) => b.nivel - a.nivel || b.xp - a.xp)
         .slice(0, 10);
-};
+}
 
-// --- ESTADO ---
+// =========================
+// READY
+// =========================
+
 client.once('ready', () => {
-    console.log(`✅ Pixi Bot v2.5 - Edición Coleccionista lista`);
-    client.user.setActivity('el Top Semanal 🏆', { type: ActivityType.Watching });
+    console.log(`✅ ${client.user.tag} conectado`);
+    console.log(`🆔 BOT ID: ${client.user.id}`);
+
+    client.user.setActivity(
+        'el Top Semanal 🏆',
+        { type: ActivityType.Watching }
+    );
 });
 
-// --- COMANDOS ---
+// =========================
+// MENSAJES
+// =========================
+
 client.on('messageCreate', async (message) => {
+
     if (message.author.bot) return;
 
     const userId = message.author.id;
     const content = message.content.trim().toLowerCase();
 
+    // =========================
+    // ANTI DUPLICADOS
+    // =========================
+
+    const cooldownKey = `${userId}-${content}`;
+
+    if (cooldowns.has(cooldownKey)) return;
+
+    cooldowns.add(cooldownKey);
+
+    setTimeout(() => {
+        cooldowns.delete(cooldownKey);
+    }, 1500);
+
+    // =========================
+    // CREAR USUARIO
+    // =========================
+
     if (!db[userId]) {
-        db[userId] = { nivel: 1, xp: 0, tickets: 3, lastTicketUpdate: Date.now(), pokedex: [], warning: false, pity: 0 };
+        db[userId] = {
+            nivel: 1,
+            xp: 0,
+            tickets: 3,
+            lastTicketUpdate: Date.now(),
+            pokedex: [],
+            warning: false,
+            pity: 0
+        };
+
         saveDB();
     }
 
     const user = db[userId];
+
     updateTickets(userId);
 
-    // --- COMANDO: ?TOP ---
+    // =========================
+    // ?TOP
+    // =========================
+
     if (content === '?top') {
+
         const top10 = obtenerTopUsuarios();
-        let rankingTxt = top10.map((u, i) => {
-            const m = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : "🔹";
-            return `${m} \`#${i + 1}\` <@${u.id}> - **Nivel ${u.nivel}**`;
+
+        const rankingTxt = top10.map((u, i) => {
+
+            const medal =
+                i === 0 ? "🥇" :
+                i === 1 ? "🥈" :
+                i === 2 ? "🥉" :
+                "🔹";
+
+            return `${medal} \`#${i + 1}\` <@${u.id}> - Nivel ${u.nivel}`;
+
         }).join('\n');
 
-        const embedTop = new EmbedBuilder()
+        const embed = new EmbedBuilder()
             .setColor('#f1c40f')
-            .setAuthor({ name: 'RANKING EN TIEMPO REAL', iconURL: 'https://i.imgur.com/vHIn8m9.png' })
-            .setThumbnail(message.author.displayAvatarURL())
-            .setDescription(`📍 **Estado de la competencia:**\n\n${rankingTxt || "Sin datos"}`)
-            .setFooter({ text: 'Usa "Arrow" para subir de nivel' });
+            .setTitle('🏆 Ranking Global')
+            .setDescription(rankingTxt || "Sin datos")
+            .setFooter({
+                text: 'Pixi Bot'
+            });
 
-        return message.reply({ embeds: [embedTop] });
+        return message.reply({
+            embeds: [embed]
+        });
     }
 
-    // --- COMANDO: !PUBLICAR-TOP ---
-    if (content === '!publicar-top') {
-        if (!message.member.permissions.has('Administrator')) return;
-        const canal = client.channels.cache.get(ID_CANAL_TOP);
-        if (!canal) return message.reply("ID de canal inválido.");
+    // =========================
+    // ARROW
+    // =========================
 
-        const top10 = obtenerTopUsuarios();
-        const elRey = top10[0];
-        
-        let rankingTxt = top10.map((u, i) => {
-            const m = i === 0 ? "👑" : i === 1 ? "⭐" : i === 2 ? "✨" : "🔸";
-            return `${m} **${i + 1}.** <@${u.id}> • Nivel ${u.nivel}`;
-        }).join('\n');
-
-        // Intentar obtener el avatar del Rey para la miniatura
-        let avatarRey = 'https://i.imgur.com/f1c40f.png'; 
-        try { 
-            const userKing = await client.users.fetch(elRey.id);
-            avatarRey = userKing.displayAvatarURL();
-        } catch(e) {}
-
-        const embedSemanal = new EmbedBuilder()
-            .setColor('#FFD700')
-            .setTitle('🔥 ¡EL CUADRO DE HONOR DE LA SEMANA! 🔥')
-            .setThumbnail(avatarRey)
-            .setDescription(`Felicidades a los miembros más activos de la **Papu Family**:\n\n${rankingTxt}\n\n▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n🚀 **¿Quién será el mejor en la próxima semana?**\n▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬`)
-            .setImage(BANNER_URL)
-            .setFooter({ text: 'Pixi Bot • Sistema de Temporadas' })
-            .setTimestamp();
-        
-        await canal.send({ content: "🔔 **@everyone**", embeds: [embedSemanal] });
-        return message.react('👑');
-    }
-
-    // --- COMANDO: ARROW ---
     if (content === 'arrow') {
+
         if (user.tickets <= 0) {
-            if (user.warning) return message.react('🤣');
-            user.warning = true; saveDB();
-            const falta = TIEMPO_TICKET - (Date.now() - user.lastTicketUpdate);
+
+            const falta =
+                TIEMPO_TICKET -
+                (Date.now() - user.lastTicketUpdate);
+
             const mins = Math.floor(falta / 60000);
             const segs = Math.floor((falta % 60000) / 1000);
 
-            const embedWait = new EmbedBuilder()
+            const embed = new EmbedBuilder()
                 .setColor('#ff4757')
-                .setTitle('⏳ ¡Sin Tickets!')
-                .setDescription(`Recuperarás uno en **${mins}m ${segs}s**.\n\n${getProgressBar(user.xp, getNextLevelXP(user.nivel))}`)
-                .setFooter({ text: `Nivel actual: ${user.nivel}` });
-            return message.reply({ embeds: [embedWait] });
+                .setTitle('⏳ Sin Tickets')
+                .setDescription(
+                    `Vuelve en ${mins}m ${segs}s`
+                );
+
+            return message.reply({
+                embeds: [embed]
+            });
         }
 
-        user.warning = false;
+        // =========================
+        // GACHA
+        // =========================
+
         user.tickets--;
         user.pity++;
-        if (user.tickets === 2) user.lastTicketUpdate = Date.now();
 
-        const pesosTotales = Object.values(gachasData.rarezas).reduce((a, b) => a + b.prob, 0);
+        if (user.tickets === 2) {
+            user.lastTicketUpdate = Date.now();
+        }
+
+        const pesosTotales =
+            Object.values(gachasData.rarezas)
+            .reduce((a, b) => a + b.prob, 0);
+
         let random = Math.random() * pesosTotales;
-        if (user.pity >= 10) random *= 0.6;
+
+        if (user.pity >= 10) {
+            random *= 0.6;
+        }
 
         let rarezaFinal = "Comun";
+
         for (const [nombre, info] of Object.entries(gachasData.rarezas)) {
-            if (random < info.prob) { rarezaFinal = nombre; break; }
+
+            if (random < info.prob) {
+                rarezaFinal = nombre;
+                break;
+            }
+
             random -= info.prob;
         }
 
-        if (["Epico", "Legendario", "Mitico", "UltraRaro"].includes(rarezaFinal)) user.pity = 0;
+        if (
+            ["Epico", "Legendario", "Mitico", "UltraRaro"]
+            .includes(rarezaFinal)
+        ) {
+            user.pity = 0;
+        }
 
-        const pool = gachasData.arros.filter(a => a.rareza === rarezaFinal);
-        const gacha = pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : gachasData.arros[0];
+        const pool = gachasData.arros.filter(
+            a => a.rareza === rarezaFinal
+        );
 
-        if (!user.pokedex.includes(gacha.nombre)) user.pokedex.push(gacha.nombre);
+        const gacha =
+            pool[Math.floor(Math.random() * pool.length)];
+
+        if (!user.pokedex.includes(gacha.nombre)) {
+            user.pokedex.push(gacha.nombre);
+        }
+
         user.xp += gachasData.rarezas[rarezaFinal].xp;
 
         let levelUpStr = "";
+
         while (user.xp >= getNextLevelXP(user.nivel)) {
+
             user.xp -= getNextLevelXP(user.nivel);
             user.nivel++;
-            levelUpStr = `\n\n⭐ **¡SUBISTE AL NIVEL ${user.nivel}!** ⭐`;
+
+            levelUpStr =
+                `\n\n⭐ ¡Subiste al nivel ${user.nivel}!`;
         }
+
         saveDB();
 
-        const embedGacha = new EmbedBuilder()
+        const embed = new EmbedBuilder()
             .setColor(gachasData.rarezas[rarezaFinal].color)
-            .setAuthor({ name: message.author.username, iconURL: message.author.displayAvatarURL() })
-            .setTitle(`✨ Invocaste a: ${gacha.nombre}`)
+            .setTitle(`✨ ${gacha.nombre}`)
             .setDescription(`Rareza: **${rarezaFinal}**`)
             .addFields(
-                { name: '🎫 Tickets', value: `${user.tickets}/3`, inline: true },
-                { name: '📈 XP', value: `+${gachasData.rarezas[rarezaFinal].xp}${levelUpStr}`, inline: true },
-                { name: '📜 Colección', value: `${user.pokedex.length} total`, inline: true }
+                {
+                    name: '🎫 Tickets',
+                    value: `${user.tickets}/3`,
+                    inline: true
+                },
+                {
+                    name: '📈 XP',
+                    value: `+${gachasData.rarezas[rarezaFinal].xp}`,
+                    inline: true
+                },
+                {
+                    name: '📜 Colección',
+                    value: `${user.pokedex.length}`,
+                    inline: true
+                }
             )
-            .setImage(gacha.imagen);
+            .setImage(gacha.imagen)
+            .setFooter({
+                text: levelUpStr || "Pixi Bot"
+            });
 
-        message.reply({ embeds: [embedGacha] });
+        return message.reply({
+            embeds: [embed]
+        });
     }
 
-    // --- OTROS COMANDOS ---
+    // =========================
+    // ?POKEDEX
+    // =========================
+
     if (content === '?pokedex') {
-        const embedDex = new EmbedBuilder()
+
+        const embed = new EmbedBuilder()
             .setColor('#2c3e50')
-            .setTitle(`📜 PokeDex de ${message.author.username}`)
-            .setDescription(user.pokedex.length > 0 ? `**Has coleccionado:**\n${user.pokedex.map(n => `• ${n}`).join('\n')}` : '¡Tu PokeDex está vacía!');
-        message.reply({ embeds: [embedDex] });
+            .setTitle(`📜 ${message.author.username}`)
+            .setDescription(
+                user.pokedex.length > 0
+                    ? user.pokedex.map(n => `• ${n}`).join('\n')
+                    : 'Vacío'
+            );
+
+        return message.reply({
+            embeds: [embed]
+        });
     }
+
+    // =========================
+    // ?NIVEL
+    // =========================
 
     if (content === '?nivel') {
+
         const next = getNextLevelXP(user.nivel);
-        const embedNivel = new EmbedBuilder()
+
+        const embed = new EmbedBuilder()
             .setColor('#3498db')
-            .setTitle(`📊 Perfil de ${message.author.username}`)
+            .setTitle(`📊 ${message.author.username}`)
             .addFields(
-                { name: 'Nivel', value: `${user.nivel}`, inline: true },
-                { name: 'XP', value: `${user.xp} / ${next}`, inline: true },
-                { name: 'Progreso', value: `${getProgressBar(user.xp, next)}` }
+                {
+                    name: 'Nivel',
+                    value: `${user.nivel}`,
+                    inline: true
+                },
+                {
+                    name: 'XP',
+                    value: `${user.xp}/${next}`,
+                    inline: true
+                },
+                {
+                    name: 'Progreso',
+                    value: getProgressBar(user.xp, next)
+                }
             );
-        message.reply({ embeds: [embedNivel] });
+
+        return message.reply({
+            embeds: [embed]
+        });
     }
 });
 
-client.login(process.env.TOKEN);
+// =========================
+// LOGIN
+// =========================
+
+client.login(TOKEN);

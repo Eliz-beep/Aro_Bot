@@ -1,8 +1,8 @@
 {
     "1426683292140175380": {
         "nivel": 11,
-        "xp": 602,
-        "tickets": 2,
+        "xp": 652,
+        "tickets": 0,
         "lastTicketUpdate": 1778421735621,
         "pokedex": [
             "Arrow",
@@ -22,7 +22,7 @@
         ],
         "warningActivo": true,
         "warning": false,
-        "pity": 0
+        "pity": 2
     },
     "1324554191531671573": {
         "nivel": 6,
@@ -43,8 +43,8 @@
     },
     "1499599530235134044": {
         "nivel": 10,
-        "xp": 197,
-        "tickets": 2,
+        "xp": 447,
+        "tickets": 1,
         "lastTicketUpdate": 1778421751448,
         "pokedex": [
             "Arrow",
@@ -57,7 +57,7 @@
             "RareArrow"
         ],
         "warning": false,
-        "pity": 3
+        "pity": 0
     },
     "1456529970129272852": {
         "nivel": 3,
