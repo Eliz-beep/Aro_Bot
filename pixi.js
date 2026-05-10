@@ -12,7 +12,6 @@ const client = new Client({
 });
 
 // --- CONFIGURACIÓN ---
-client.login(process.env.TOKEN);
 const DATA_FILE = './usuarios.json';
 const TIEMPO_TICKET = 7 * 60 * 1000; 
 const ID_CANAL_TOP = '1500647578281312286'; 

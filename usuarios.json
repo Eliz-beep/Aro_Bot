@@ -1,9 +1,9 @@
 {
     "1426683292140175380": {
         "nivel": 11,
-        "xp": 102,
-        "tickets": 3,
-        "lastTicketUpdate": 1778102271280,
+        "xp": 602,
+        "tickets": 2,
+        "lastTicketUpdate": 1778421735621,
         "pokedex": [
             "Arrow",
             "CatArrow",
@@ -17,7 +17,8 @@
             "Aro-Bot",
             "PixelArrow",
             "BigArrow",
-            "ArrowDistorsion"
+            "ArrowDistorsion",
+            "ArrowBlur"
         ],
         "warningActivo": true,
         "warning": false,
@@ -42,9 +43,9 @@
     },
     "1499599530235134044": {
         "nivel": 10,
-        "xp": 172,
-        "tickets": 3,
-        "lastTicketUpdate": 1778371057195,
+        "xp": 197,
+        "tickets": 2,
+        "lastTicketUpdate": 1778421751448,
         "pokedex": [
             "Arrow",
             "CatArrow",
@@ -56,7 +57,7 @@
             "RareArrow"
         ],
         "warning": false,
-        "pity": 2
+        "pity": 3
     },
     "1456529970129272852": {
         "nivel": 3,
